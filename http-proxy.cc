@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <cstring>
+#include <pthread.h>
 
 //C socket stuff
 #include <sys/types.h>
@@ -18,8 +19,16 @@
 
 
 #define PROXY_SERVER_PORT "14886"
+#define MAX_THREAD_NUM    20
+
 
 using namespace std;
+
+typedef struct str_thdata{
+  int client_id;
+}thread_params;
+
+
 /*
    Create a socket that could be binded to the port successfully
    returns the socket fd, or -1 if error
@@ -62,7 +71,7 @@ int create_socket (const char *port)
    
    // No binds happened
    if (rp == NULL){
-      fprintf(stderr, "[SERVER]:  could not bind\n");
+      fprintf(stderr, "[SERVER]: could not bind\n");
       return -2;
    }
    
@@ -72,6 +81,14 @@ int create_socket (const char *port)
    return socket_fd;
 }
 
+void* ptread_connection(void *params){
+   thread_params *tp;
+   tp = (thread_params *)params;
+   
+   cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;
+   cout <<"Thread exit"<<endl;
+   return NULL;
+}
 
 
 int main (int argc, char *argv[])
@@ -83,6 +100,10 @@ int main (int argc, char *argv[])
    cout <<"[DEBUG]: create socket at port "<<PROXY_SERVER_PORT<<endl;
    // command line parsing
    socket_fd = create_socket(PROXY_SERVER_PORT);
+   if(socket_fd< 0){
+      fprintf(stderr, "Can't create socket\n");
+      return -1;
+   }
    
    cout <<"[DEBUG]: listen to client"<<endl;
    // now start listening for the incoming client connections
@@ -92,20 +113,25 @@ int main (int argc, char *argv[])
    }
    
    
-  cout <<"[DEBUG]: accepting connections"<<endl;
+   
    while(1){
+      cout <<"[DEBUG]: accepting connections"<<endl;
       // accept awaiting request
       client_id = accept(socket_fd, (struct sockaddr *)&client_addr, &client_len);
       if (client_id == -1){
          perror("[SERVER]: Failed to accept connection");
          continue;
       }
-      
-      //strcpy(sendBuff, "Message from server");
-      //write(connfd, sendBuff, strlen(sendBuff));
-      
-      close(client_id);    
-      sleep(1);
+      cout <<"New connection!"<<endl;
+      //spawn a new thread for each new connection
+      thread_params tp;
+      tp.client_id = client_id;
+      pthread_t thread;
+      if(pthread_create(&thread, NULL, ptread_connection, (void *) &tp)){
+         perror("[SERVER]: thread creation failed \n");
+         return -1;
+      }
+      pthread_detach(thread);
    }
   
   
