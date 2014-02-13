@@ -88,7 +88,6 @@ void* ptread_connection(void *params){
    cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;
    
    
-   
    /*
       Read the HTTP request from the client
    */
@@ -105,6 +104,8 @@ void* ptread_connection(void *params){
       }
       req_data.append(buf);
    }
+   
+   cout << "REQUEST IS " << endl << req_data<<endl;
    
    /*
       parse the HTTP request
@@ -130,17 +131,30 @@ void* ptread_connection(void *params){
       
       // Send the bad stuff!
       if (write(tp->client_id, client_res.c_str(), client_res.length()) == -1){
-         perror("[SERVER]: Can't write response");
+         perror("[SERVER]: Can't write error response");
       }
       
    }
    
+   cout <<"HOST: " << client_req.GetHost();
+   cout <<"PATH: " <<client_req.GetPath()<<endl;
+   
+   /*
+      Get the reponse from remote server or from local cache
+      TODO
+   */
+   string response = ""; 
    
    /*
       write the response to the client
    */
+   if (write(tp->client_id, response.c_str(), response.length()) == -1)
+   {
+      perror("[SERVER]: Can't write response");
+      free(remote_req);
+      return NULL;
+   }
    
-   cout << "REQUEST" << endl << req_data<<endl;
    
    
    cout <<"[THREAD DEBUG] Thread exit"<<endl;
