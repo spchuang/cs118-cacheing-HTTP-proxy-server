@@ -221,6 +221,23 @@ void* ptread_connection(void *params){
    
    //cout the stuff received from the server, and store the response in the HttpResponse object
    HttpResponse response = make_req_get_resp(client_req);
+   
+   //format the response
+   size_t resp_len = response.GetTotalLength();
+   char* format_resp = new char[resp_len];
+   response.FormatResponse(format_resp);
+   resp_len = strlen(format_resp);
+   
+   if(send(tp->client_id, format_resp, resp_len, 0) < 0)
+   {
+     perror("[SERVER]: Failed to send the response");
+     close(tp->client_id);
+     return NULL;
+   }
+   else
+     cout << "[SERVER]: Sending response..." << endl;
+     
+     
    /*
       Get the reponse from remote server or from local cache
       TODO
