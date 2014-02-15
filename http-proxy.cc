@@ -16,10 +16,10 @@
 #include <arpa/inet.h>
 
 #include "http-request.h"
-#include "http-response.h""
+#include "http-response.h"
 
 
-#define PROXY_SERVER_PORT "14886"
+#define PROXY_SERVER_PORT "14881" //"14886"
 #define MAX_THREAD_NUM    20
 #define BUFFER_SIZE 1024
 
@@ -83,82 +83,65 @@ int create_socket (const char *port)
    return socket_fd;
 }
 
-HttpResponse make_req_get_resp(HttpRequest req)
+int create_proxy_remote_connection(const char* server_name, const char* port_num){
+   
+   
+   //socket stuff
+   struct addrinfo hints, *res;
+   int client_sock_fd, t;
+   
+   memset(&hints, 0, sizeof hints);
+   hints.ai_family = AF_UNSPEC;
+   hints.ai_socktype = SOCK_STREAM;
+   hints.ai_flags = AI_PASSIVE;
+   
+   t = getaddrinfo(server_name, port_num, &hints, &res);
+   if(t != 0){
+      //fprintf(stderr, "[CLIENT]: Cannot get addr info: %s\n", gai_strerror(t));
+      return -1;
+   }
+   
+   //create the socket
+   client_sock_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+   if(client_sock_fd <0){
+      //perror("[SERVER CLIENT]: cannot open socket");
+      return -1;
+   }
+   
+   //connect through the socket
+   if(connect(client_sock_fd, res->ai_addr, res->ai_addrlen) < 0){
+      //perror("[SERVER CLIENT]: Connection failed");
+      close(client_sock_fd);
+      return -1;
+   }else{
+      cout << "[SERVER CLIENT]: Connection established." << endl;
+   }
+   return client_sock_fd;
+   
+}
+
+int get_remote_response(int client_sock_fd, HttpResponse& resp)
 {
-  //parse the request
-  size_t req_len = req.GetTotalLength();
-  char* parsed_req = new char[req_len];
-  req.FormatRequest(parsed_req);
-  
-  req_len = strlen(parsed_req);
-  
-  //obtain server_name
-  const char* server_name = req.GetHost().c_str();
-  
-  //obtain server port
-  stringstream ss;
-  ss << req.GetPort();
-  const char* port_num = ss.str().c_str();
-  
-  
-  //socket stuff
-  struct addrinfo hints, *res;
-  int client_sock_fd, t;
-  
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
-  
-  t = getaddrinfo(server_name, port_num, &hints, &res);
-  if(t != 0)
-  {
-    fprintf(stderr, "[CLIENT]: Cannot get addr info: %s\n", gai_strerror(t));
-  }
-  
-  //create the socket
-  client_sock_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-  
-  //connect through the socket
-  if(connect(client_sock_fd, res->ai_addr, res->ai_addrlen) < 0)
-  {
-    perror("[CLIENT]: Connection failed");
-    close(client_sock_fd);
-  }
-  else
-    cout << "[CLIENT]: Connection established." << endl;
-    
-  //send the msg
-  int bytes_sent, bytes received;
-  bytes_sent = send(client_sock_fd, parsed_req, req_len, 0);
-  if(bytes_sent < 0)
-  {
-    perror("[CLIENT]: Sending request failed");
-    close(client_sock_fd);
-  }
-  else
-    cout << "[CLIENT]: Sending request..." << endl;
-    
-  //receive the response
-  string response;
-  while(memmem(response.c_str(), response.length(), "\r\n\r\n", 4) == NULL)
-  {
+   string response;
+   
+   //receive the response
+   while(memmem(response.c_str(), response.length(), "\r\n\r\n", 4) == NULL)
+   {
     char recv_buff[1024];
-    bytes_received = recv(client_sock_fd, recv_buff, sizeof(recv_buff), 0);
-    if(bytes_received < 0)
+    if(recv(client_sock_fd, recv_buff, sizeof(recv_buff), 0) < 0){
       cout << "[CLIENT]: Failed to get the response";
-    else
-    {
+      return -1;
+    }else{
       response.append(recv_buff);
       memset(recv_buff, 0, sizeof(recv_buff));
-      cout << "Received: " << response << endl;
     }
-  }
-  
-  //Parse the response, store the information in a HttpResponse object
-  HttpResponse resp;
-  resp.ParseResponse(response.c_str(), response.length());
-  return resp;
+   }
+   
+   cout << "[SERVER CLIENT] Received: " << endl<< response << endl;
+   //Parse the response, store the information in a HttpResponse object
+   resp.ParseResponse(response.c_str(), response.length());
+   
+   return 1;
 }
 
 
@@ -167,6 +150,7 @@ HttpResponse make_req_get_resp(HttpRequest req)
 void* ptread_connection(void *params){
    thread_params *tp;
    tp = (thread_params *)params;
+   int remote_fd;
    cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;
    
    
@@ -193,16 +177,13 @@ void* ptread_connection(void *params){
       parse the HTTP request
    */
    
-   
    HttpRequest client_req;
    try {
       client_req.ParseRequest(req_data.c_str(), req_data.length());
-   
    }catch (ParseException ex) {
       fprintf(stderr, "Exception raised: %s\n", ex.what());
       
       string client_res = "HTTP/1.0 ";
-      
       // only 2 bad request response
       string cmp = "Request is not GET";
       if (strcmp(ex.what(), cmp.c_str()) != 0){
@@ -210,17 +191,65 @@ void* ptread_connection(void *params){
       }else{
          client_res += "501 Not Implemented\r\n\r\n";
       }
-      
       // Send the bad stuff!
       if (write(tp->client_id, client_res.c_str(), client_res.length()) == -1){
          perror("[SERVER]: Can't write error response");
       }
-      
+   }
+   /*
+      get the remote server name and the port
+   */
+   
+   //obtain server_name
+   const char* server_name = client_req.GetHost().c_str();
+   
+   //obtain server port
+   stringstream ss;
+   ss << client_req.GetPort();
+   const char* port_num = ss.str().c_str();
+   
+   /*
+      Create connection with the remote server
+   */
+   remote_fd= create_proxy_remote_connection(server_name, port_num);
+   if(remote_fd<0){
+      perror("[SERVER CLIENT]: Can't create remote connection");
+      return NULL;
+   }
+   /*
+      Send request to remote server
+   */
+
+   //parse the request into character array
+   size_t req_len = client_req.GetTotalLength()+1;
+   char* parsed_req = new char[req_len];
+   client_req.FormatRequest(parsed_req);
+   
+   //send the msg
+   if( send(remote_fd, parsed_req, req_len, 0) <0){
+     perror("[SERVER CLIENT]: Sending request to remote server failed");
+     close(remote_fd);
+     return NULL;
+   }else{
+     cout << "[SERVER CLIENT]: Sending request..." << endl;
    }
    
+   /*
+      Get the reponse from remote server or from local cache
+      TODO: cache
+   */
+   HttpResponse response;
+   
+   req_len = strlen(parsed_req);
+   if(get_remote_response(remote_fd, response) <0){
+      perror("[SERVER CLIENT]: can't get response from remote server");
+      delete parsed_req;
+      close(remote_fd);
+      return NULL;
+   }
    
    //cout the stuff received from the server, and store the response in the HttpResponse object
-   HttpResponse response = make_req_get_resp(client_req);
+  
    
    //format the response
    size_t resp_len = response.GetTotalLength();
@@ -231,17 +260,13 @@ void* ptread_connection(void *params){
    if(send(tp->client_id, format_resp, resp_len, 0) < 0)
    {
      perror("[SERVER]: Failed to send the response");
-     close(tp->client_id);
      return NULL;
    }
    else
      cout << "[SERVER]: Sending response..." << endl;
      
-     
-   /*
-      Get the reponse from remote server or from local cache
-      TODO
-   */
+   
+   
 
    /*
       write the response to the client
@@ -255,6 +280,9 @@ void* ptread_connection(void *params){
 */   
    
    
+   delete parsed_req;
+   delete format_resp;
+   close(tp->client_id);
    cout <<"[THREAD DEBUG] Thread exit"<<endl;
    return NULL;
 }
