@@ -15,6 +15,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "http-request.h"
 #include "http-response.h"
@@ -23,6 +24,7 @@
 #define PROXY_SERVER_PORT "14885" //"14886"
 #define MAX_THREAD_NUM    20
 #define BUFFER_SIZE 1024
+#define PERSISTENT_TIME_OUT 5 //5 seconds
 
 
 using namespace std;
@@ -126,18 +128,23 @@ int create_proxy_remote_connection(const char* server_name, const char* port_num
 int read_until(int client_id, const char* end_string, const int length, string& data)
 {
    data = "";
-   size_t bytes_rcv;
+   ssize_t bytes_rcv;
    char buf[BUFFER_SIZE];
    while (memmem(data.c_str(), data.length(), end_string, length) == NULL)
    {
       
       memset(buf, 0, BUFFER_SIZE);
       bytes_rcv = recv(client_id, buf, sizeof(buf)-1 , 0);
+      if(bytes_rcv == EAGAIN){
+         cout <<"BLOCK"<<endl;
+         return -2;
+      }
       if (bytes_rcv < 0)
       {
          perror("[SERVER]: Can't read incoming request data");
          return -1;
       }
+      
       
       data.append(buf, bytes_rcv);
       //cout <<"[TEMP BUFFER]'"<<buf<<"'"<<endl;
@@ -148,14 +155,14 @@ int read_until(int client_id, const char* end_string, const int length, string& 
 int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
 {
    string response;
-   int bytes_rcv;
+   
    
    //receive the response
    //READ the http header
    if(read_until(client_sock_fd, "\r\n\r\n", 4, response) <0){
       return -1;
    }
-   //cout <<"READ SIZE: " <<response.length()<<endl;
+   cout <<"READ SIZE: " <<response.length()<<endl;
    //cout <<"[DEBUG]READ RESPONSE: " <<endl<<"'"<<response<<"'"<<endl;
    
    try {
@@ -175,6 +182,7 @@ int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
    //read the response body
    resp.body="";
    char recv_buff[BUFFER_SIZE];
+   ssize_t bytes_rcv;
    while(body_size>0)
    {
       memset(recv_buff, 0, BUFFER_SIZE);
@@ -187,7 +195,7 @@ int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
       body_size -= bytes_rcv;
       resp.body.append(recv_buff);
    }
-   //cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<resp.body<<"'"<<endl;
+   cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<resp.body<<"'"<<endl;
    resp.entire = response+resp.body;
    
    //cout << body_size << " : " <<resp.body<<endl;
@@ -238,6 +246,7 @@ void* ptread_connection(void *params){
    cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;
    
    do{
+      cout <<"START LOOP for client id "<<tp->client_id<<endl;
       
       /* 
          Read the HTTP request from the client
@@ -245,7 +254,7 @@ void* ptread_connection(void *params){
       string req_data;
       // Loop until we get "\r\n\r\n"
       if(read_until(tp->client_id, "\r\n\r\n", 4, req_data) <0){
-         return NULL;
+         break;
       }
       cout << "REQUEST IS " << endl << req_data<<endl;
       
@@ -271,6 +280,7 @@ void* ptread_connection(void *params){
          if (send(tp->client_id, client_res.c_str(), client_res.length(),0)<0){
             perror("[SERVER]: Can't write error response");
          }
+         break;
       }
       /*
          Find persistent connection header
@@ -300,7 +310,7 @@ void* ptread_connection(void *params){
       remote_fd= create_proxy_remote_connection(server_name, port_num);
       if(remote_fd<0){
          perror("[SERVER CLIENT]: Can't create remote connection");
-         return NULL;
+         break;
       }
       
       /*
@@ -317,7 +327,7 @@ void* ptread_connection(void *params){
       if(send(remote_fd, parsed_req, req_len, 0) <0){
         perror("[SERVER CLIENT]: Sending request to remote server failed");
         close(remote_fd);
-        return NULL;
+        break;
       }
       delete parsed_req;
       
@@ -331,7 +341,7 @@ void* ptread_connection(void *params){
          perror("[SERVER CLIENT]: can't get response from remote server");
          delete parsed_req;
          close(remote_fd);
-         return NULL;
+         break;
       }
       close(remote_fd);
       //cout <<"[DEBUG]SIZE: " <<response.entire.length()<<endl;
@@ -344,7 +354,7 @@ void* ptread_connection(void *params){
       if(send_response(tp->client_id, response) <0){
          perror("[SERVER CLIENT]: can't get send response to client");
          delete parsed_req;
-         return NULL;
+         break;
       }
         
       
@@ -362,7 +372,7 @@ void* ptread_connection(void *params){
    
    
    close(tp->client_id);
-   cout <<"[THREAD DEBUG] Thread exit"<<endl;
+   cout <<"[THREAD DEBUG] Thread exit for "<<tp->client_id<<endl;
    return NULL;
 }
 
@@ -399,18 +409,34 @@ int main (int argc, char *argv[])
          perror("[SERVER]: Failed to accept connection");
          continue;
       }
-      cout <<"New connection!"<<endl;
+      /*
+         Set client timeout
+      
+      */
+      struct timeval tv;
+      tv.tv_sec  = PERSISTENT_TIME_OUT;  
+      tv.tv_usec = 0;
+      if(setsockopt( client_id, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))<0){
+         perror("[SERVER]: setsockopt can't set timeout ob rcv");
+         return -1;
+      }
+      
+      
+      cout <<"Accept new connection with client id of " <<client_id<<endl;
       //spawn a new thread for each new connection
       thread_params tp;
       tp.client_id = client_id;
       pthread_t thread;
       if(pthread_create(&thread, NULL, ptread_connection, (void *) &tp)){
+         close(client_id);
+         close(socket_fd);
          perror("[SERVER]: thread creation failed \n");
          return -1;
       }
+      //BUG HERE with client id attachment
       pthread_detach(thread);
    }
-  
+   close(socket_fd);
   
   return 0;
 }
