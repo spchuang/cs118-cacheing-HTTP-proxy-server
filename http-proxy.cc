@@ -20,7 +20,7 @@
 #include "http-response.h"
 
 
-#define PROXY_SERVER_PORT "14886" //"14886"
+#define PROXY_SERVER_PORT "14885" //"14886"
 #define MAX_THREAD_NUM    20
 #define BUFFER_SIZE 1024
 
@@ -218,6 +218,7 @@ int send_response(int client_id, const FullHttpResponse response)
      
      return -1;
    }*/
+   cout <<"[DEBUG]SIZE: " <<response.entire.length()<<endl;
    cout<<"[DEBUG]WRITE: '"<<response.entire.c_str()<<"'"<<endl;
    
    if(send(client_id, response.entire.c_str(), response.entire.length(), 0) < 0){
@@ -230,127 +231,137 @@ int send_response(int client_id, const FullHttpResponse response)
 
 
 void* ptread_connection(void *params){
+   bool persistent = true;
    thread_params *tp;
    tp = (thread_params *)params;
    int remote_fd;
    cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;
    
-   
-   /*
-      Read the HTTP request from the client
-   */
-   string req_data;
-   // Loop until we get "\r\n\r\n"
-   if(read_until(tp->client_id, "\r\n\r\n", 4, req_data) <0){
-      return NULL;
-   }
-   cout << "REQUEST IS " << endl << req_data<<endl;
-   
-   /*
-      parse the HTTP request
-   */
-   
-   HttpRequest client_req;
-   try {
-      client_req.ParseRequest(req_data.c_str(), req_data.length());
-   }catch (ParseException ex) {
-      fprintf(stderr, "Exception raised: %s\n", ex.what());
+   do{
       
-      string client_res = "HTTP/1.0 ";
-      // only 2 bad request response
-      string cmp = "Request is not GET";
-      if (strcmp(ex.what(), cmp.c_str()) != 0){
-         client_res += "400 Bad Request\r\n\r\n";
+      /* 
+         Read the HTTP request from the client
+      */
+      string req_data;
+      // Loop until we get "\r\n\r\n"
+      if(read_until(tp->client_id, "\r\n\r\n", 4, req_data) <0){
+         return NULL;
+      }
+      cout << "REQUEST IS " << endl << req_data<<endl;
+      
+      /*
+         parse the HTTP request
+      */
+      
+      HttpRequest client_req;
+      try {
+         client_req.ParseRequest(req_data.c_str(), req_data.length());
+      }catch (ParseException ex) {
+         fprintf(stderr, "Exception raised: %s\n", ex.what());
+         
+         string client_res = "HTTP/1.0 ";
+         // only 2 bad request response
+         string cmp = "Request is not GET";
+         if (strcmp(ex.what(), cmp.c_str()) != 0){
+            client_res += "400 Bad Request\r\n\r\n";
+         }else{
+            client_res += "501 Not Implemented\r\n\r\n";
+         }
+         // Send the bad stuff!
+         if (send(tp->client_id, client_res.c_str(), client_res.length(),0)<0){
+            perror("[SERVER]: Can't write error response");
+         }
+      }
+      /*
+         Find persistent connection header
+      */ 
+      string connection = client_req.FindHeader("Connection");
+      if(connection == "close"){
+         persistent = false;
       }else{
-         client_res += "501 Not Implemented\r\n\r\n";
+         persistent = true;
       }
-      // Send the bad stuff!
-      if (send(tp->client_id, client_res.c_str(), client_res.length(),0)<0){
-         perror("[SERVER]: Can't write error response");
+      /*
+         get the remote server name and the port
+      */
+      
+      //obtain server_name
+      const char* server_name = client_req.GetHost().c_str();
+      
+      //obtain server port
+      stringstream ss;
+      ss << client_req.GetPort();
+      const char* port_num = ss.str().c_str();
+      
+      /*
+         Create connection with the remote server
+      */
+      cout << "[SERVER CLIENT]: making connection with the remote server." << endl;
+      remote_fd= create_proxy_remote_connection(server_name, port_num);
+      if(remote_fd<0){
+         perror("[SERVER CLIENT]: Can't create remote connection");
+         return NULL;
       }
-   }
-   /*
-      get the remote server name and the port
-   */
+      
+      /*
+         Send request to remote server
+      */
    
-   //obtain server_name
-   const char* server_name = client_req.GetHost().c_str();
-   
-   //obtain server port
-   stringstream ss;
-   ss << client_req.GetPort();
-   const char* port_num = ss.str().c_str();
-   
-   /*
-      Create connection with the remote server
-   */
-   cout << "[SERVER CLIENT]: making connection with the remote server." << endl;
-   remote_fd= create_proxy_remote_connection(server_name, port_num);
-   if(remote_fd<0){
-      perror("[SERVER CLIENT]: Can't create remote connection");
-      return NULL;
-   }
-   
-   /*
-      Send request to remote server
-   */
-
-   //parse the request into character array
-   size_t req_len = client_req.GetTotalLength()+1;
-   char* parsed_req = new char[req_len];
-   client_req.FormatRequest(parsed_req);
-   
-   //send the msg
-   cout << "[SERVER CLIENT]: Sending request..." << endl;
-   if(send(remote_fd, parsed_req, req_len, 0) <0){
-     perror("[SERVER CLIENT]: Sending request to remote server failed");
-     close(remote_fd);
-     return NULL;
-   }
-   
-   
-   /*
-      Get the reponse from remote server or from local cache
-      TODO: cache
-   */
-   FullHttpResponse response;
-   cout << "[SERVER CLIENT]: get remote response..." << endl;
-   if(get_remote_response(remote_fd, response) <0){
-      perror("[SERVER CLIENT]: can't get response from remote server");
+      //parse the request into character array
+      size_t req_len = client_req.GetTotalLength()+1;
+      char* parsed_req = new char[req_len];
+      client_req.FormatRequest(parsed_req);
+      
+      //send the msg
+      cout << "[SERVER CLIENT]: Sending request..." << endl;
+      if(send(remote_fd, parsed_req, req_len, 0) <0){
+        perror("[SERVER CLIENT]: Sending request to remote server failed");
+        close(remote_fd);
+        return NULL;
+      }
       delete parsed_req;
+      
+      /*
+         Get the reponse from remote server or from local cache
+         TODO: cache
+      */
+      FullHttpResponse response;
+      cout << "[SERVER CLIENT]: get remote response..." << endl;
+      if(get_remote_response(remote_fd, response) <0){
+         perror("[SERVER CLIENT]: can't get response from remote server");
+         delete parsed_req;
+         close(remote_fd);
+         return NULL;
+      }
       close(remote_fd);
-      return NULL;
-   }
-   close(remote_fd);
-   cout <<"[DEBUG]SIZE: " <<response.entire.length()<<endl;
-   cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<response.entire<<"'"<<endl;
+      //cout <<"[DEBUG]SIZE: " <<response.entire.length()<<endl;
+      //cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<response.entire<<"'"<<endl;
+      
+      /*
+         write the response to the client
+      */
+      cout << "[SERVER CLIENT]: send remote response..." << endl;
+      if(send_response(tp->client_id, response) <0){
+         perror("[SERVER CLIENT]: can't get send response to client");
+         delete parsed_req;
+         return NULL;
+      }
+        
+      
    
-   /*
-      write the response to the client
-   */
-   cout << "[SERVER CLIENT]: send remote response..." << endl;
-   if(send_response(tp->client_id, response) <0){
-      perror("[SERVER CLIENT]: can't get send response to client");
-      delete parsed_req;
-      return NULL;
-   }
-     
+      
+   /*   if (write(tp->client_id, response.c_str(), response.length()) == -1)
+      {
+         perror("[SERVER]: Can't write response");
+         free(remote_req);
+         return NULL;
+      }
+   */   
    
-
+   }while(persistent);
    
-/*   if (write(tp->client_id, response.c_str(), response.length()) == -1)
-   {
-      perror("[SERVER]: Can't write response");
-      free(remote_req);
-      return NULL;
-   }
-*/   
-   
-   
-   delete parsed_req;
    
    close(tp->client_id);
-   
    cout <<"[THREAD DEBUG] Thread exit"<<endl;
    return NULL;
 }

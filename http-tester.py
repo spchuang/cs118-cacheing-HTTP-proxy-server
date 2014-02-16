@@ -119,7 +119,7 @@ class ClientPersistThread(Thread):
         cdata = dataFile.read()
         dataFile = open(self.file2, "r")
         cdata2 = dataFile.read()
-
+        print "SEND URL1"
         conn.request("GET", self.url)
         resp = conn.getresponse()
         rdata = resp.read()
@@ -128,7 +128,7 @@ class ClientPersistThread(Thread):
             
         if resp.will_close == True:
             tmpFlag = False
-
+        print "SEND URL2"
         connHdrs = {"Connection": "close"}
         conn.request("GET", self.url2, headers=connHdrs)
         
@@ -168,8 +168,8 @@ server2 = ServerThread(int(sport2))
 server1.start()
 server2.start()
 
-while 1:
-   test =1
+#while 1:
+#   test =1
 client1 = ClientThread("127.0.0.1:" + pport, "http://127.0.0.1:" + sport1 + "/basic", "./basic")
 client1.start()
 client1.join()
@@ -185,6 +185,8 @@ if client2.result:
     print "Persistent Connection: [" + bcolors.PASS + "PASSED" + bcolors.ENDC + "]"
 else:
     print "Persistent Connection: [" + bcolors.FAIL + "FAILED" + bcolors.ENDC + "]"
+
+sys.exit(0)
 
 client3 = ClientThread("127.0.0.1:" + pport, "http://127.0.0.1:"+ sport1 +"/basic3", "./basic3")
 client4 = ClientThread("127.0.0.1:" + pport, "http://127.0.0.1:"+ sport2 +"/basic3", "./basic3")
