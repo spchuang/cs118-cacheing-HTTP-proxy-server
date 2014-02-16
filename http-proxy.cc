@@ -25,7 +25,6 @@
 #define BUFFER_SIZE 1024
 
 
-
 using namespace std;
 
 typedef struct str_thdata{
@@ -36,6 +35,7 @@ class FullHttpResponse{
    public:
       HttpResponse header;
       string body;
+      string entire;
 };
 
 /*
@@ -123,6 +123,28 @@ int create_proxy_remote_connection(const char* server_name, const char* port_num
    
 }
 
+int read_until(int client_id, const char* end_string, const int length, string& data)
+{
+   data = "";
+   size_t bytes_rcv;
+   char buf[BUFFER_SIZE];
+   while (memmem(data.c_str(), data.length(), end_string, length) == NULL)
+   {
+      
+      memset(buf, 0, BUFFER_SIZE);
+      bytes_rcv = recv(client_id, buf, sizeof(buf)-1 , 0);
+      if (bytes_rcv < 0)
+      {
+         perror("[SERVER]: Can't read incoming request data");
+         return -1;
+      }
+      
+      data.append(buf, bytes_rcv);
+      //cout <<"[TEMP BUFFER]'"<<buf<<"'"<<endl;
+      
+   }
+   return 1;
+}
 int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
 {
    string response;
@@ -130,17 +152,12 @@ int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
    
    //receive the response
    //READ the http header
-   while(memmem(response.c_str(), response.length(), "\r\n\r\n", 4) == NULL)
-   {
-      char recv_buff[1024];
-      if(recv(client_sock_fd, recv_buff, sizeof(recv_buff), 0) < 0){
-         cout << "[CLIENT]: Failed to get the response";
-         return -1;
-      }else{
-         response.append(recv_buff);
-         memset(recv_buff, 0, sizeof(recv_buff));
-      }
+   if(read_until(client_sock_fd, "\r\n\r\n", 4, response) <0){
+      return -1;
    }
+   //cout <<"READ SIZE: " <<response.length()<<endl;
+   //cout <<"[DEBUG]READ RESPONSE: " <<endl<<"'"<<response<<"'"<<endl;
+   
    try {
       resp.header.ParseResponse(response.c_str(), response.length());
    }catch (ParseException ex) {
@@ -157,40 +174,29 @@ int get_remote_response(int client_sock_fd, FullHttpResponse& resp)
       
    //read the response body
    resp.body="";
+   char recv_buff[BUFFER_SIZE];
    while(body_size>0)
    {
-      char recv_buff[1024];
-      bytes_rcv = recv(client_sock_fd, recv_buff, sizeof(recv_buff), 0);
+      memset(recv_buff, 0, BUFFER_SIZE);
+      bytes_rcv = recv(client_sock_fd, recv_buff, sizeof(recv_buff)-1, 0);
+      //cout <<"BYTES RECV IS " <<bytes_rcv<<endl;
       if( bytes_rcv < 0){
          cout << "[CLIENT]: Failed to get the body response";
          return -1;
-      }else{
-         body_size -= bytes_rcv;
-         resp.body.append(recv_buff);
-         memset(recv_buff, 0, sizeof(recv_buff));
       }
+      body_size -= bytes_rcv;
+      resp.body.append(recv_buff);
    }
+   //cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<resp.body<<"'"<<endl;
+   resp.entire = response+resp.body;
+   
    //cout << body_size << " : " <<resp.body<<endl;
    //cout << "[SERVER CLIENT] Received: " << endl<< response << endl;
 
    return 1;
 }
 
-int read_until(int client_id, const char* end_string, const int length, string& data)
-{
-   data = "";
-   while (memmem(data.c_str(), data.length(), end_string, length) == NULL)
-   {
-      char buf[BUFFER_SIZE];
-      if (read(client_id, buf, BUFFER_SIZE) == 0)
-      {
-         perror("[SERVER]: Can't read incoming request data");
-         return -1;
-      }
-      data.append(buf);
-   }
-   return 1;
-}
+
 
 int send_response(int client_id, const FullHttpResponse response)
 {
@@ -200,20 +206,25 @@ int send_response(int client_id, const FullHttpResponse response)
    resp_len = strlen(format_resp);
    
    //send the header
-   if(send(client_id, format_resp, resp_len, 0) < 0){
+   /*if(send(client_id, format_resp, resp_len, 0) < 0){
      perror("[SERVER]: Failed to send the response");
      delete format_resp;
      return -1;
    }
-   
+   delete format_resp;
    //send the body
    if(send(client_id, response.body.c_str(), response.body.length(), 0) < 0){
      perror("[SERVER]: Failed to send the response");
-     delete format_resp;
+     
+     return -1;
+   }*/
+   cout<<"[DEBUG]WRITE: '"<<response.entire.c_str()<<"'"<<endl;
+   
+   if(send(client_id, response.entire.c_str(), response.entire.length(), 0) < 0){
+     perror("[SERVER]: Failed to send the response");
      return -1;
    }
    
-   delete format_resp;
    return 1;
 }
 
@@ -297,6 +308,7 @@ void* ptread_connection(void *params){
      return NULL;
    }
    
+   
    /*
       Get the reponse from remote server or from local cache
       TODO: cache
@@ -310,6 +322,8 @@ void* ptread_connection(void *params){
       return NULL;
    }
    close(remote_fd);
+   cout <<"[DEBUG]SIZE: " <<response.entire.length()<<endl;
+   cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<response.entire<<"'"<<endl;
    
    /*
       write the response to the client

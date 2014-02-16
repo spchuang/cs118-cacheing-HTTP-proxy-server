@@ -67,7 +67,6 @@ class ServerThread (Thread):
     
 class ClientThread (Thread):
     def __init__(self, proxy, url, file):
-        print "INITIALIZE THREAD"
         Thread.__init__(self)
         self.proxy = proxy
         self.url = url
@@ -76,8 +75,9 @@ class ClientThread (Thread):
         self.data = ""
 
     def run(self):
-        print "THREAD RUN\n"
+
         if self.file:
+            print "RUN THE THREAD CLIENT"
             dataFile = open(self.file, "r")
             cdata = dataFile.read()
         
@@ -85,13 +85,9 @@ class ClientThread (Thread):
             conn.request("GET", self.url)
             resp = conn.getresponse()
             rdata = resp.read()
-            print "RDATA"
-            print rdata
-            print "CDATA"
-            print cdata
+
             if rdata == cdata:
                 self.result = True
-                print "THIS SHIT IS RIGHT"
             self.data = rdata
             conn.close()
             dataFile.close()
@@ -135,7 +131,7 @@ class ClientPersistThread(Thread):
 
         connHdrs = {"Connection": "close"}
         conn.request("GET", self.url2, headers=connHdrs)
-
+        
         resp = conn.getresponse()
         rdata2 = resp.read()
         if rdata2 != cdata2:
@@ -172,22 +168,19 @@ server2 = ServerThread(int(sport2))
 server1.start()
 server2.start()
 
-print "START CLIENT 1"
+while 1:
+   test =1
 client1 = ClientThread("127.0.0.1:" + pport, "http://127.0.0.1:" + sport1 + "/basic", "./basic")
 client1.start()
 client1.join()
-print "RESULT"
-print client1.result
 if client1.result:
     print "Basic object fetching: [" + bcolors.PASS + "PASSED" + bcolors.ENDC + "]" 
 else: 
     print "Basic object fetching: [" + bcolors.FAIL + "FAILED" + bcolors.ENDC + "]" 
-    
 
 client2 = ClientPersistThread("127.0.0.1:" + pport, "http://127.0.0.1:" + sport1 + "/basic", "./basic", "http://127.0.0.1:" + sport1 + "/basic2", "./basic2")
 client2.start()
 client2.join()
-
 if client2.result:
     print "Persistent Connection: [" + bcolors.PASS + "PASSED" + bcolors.ENDC + "]"
 else:
