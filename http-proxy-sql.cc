@@ -475,9 +475,7 @@ void* ptread_connection(void *params){
 	string expir = response.header.FindHeader("Expires");
 	const char* formated_resp = response.entire.c_str();
 	
-	//update the database, host/path, expiration date, response.entire
-	
-	
+	//INSERT host/path, expiration date, response.entire INTO the database
 	sql = "INSERT INTO CACHE VALUES(" + host_path + ", " + expir + ", " + formated_resp + ");";
 
 	rc = sqlite3_exec(db, sql, callback, (void*)data, &zErrMsg);
