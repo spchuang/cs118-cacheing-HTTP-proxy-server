@@ -40,6 +40,12 @@ def build (env):
             "http-headers.cc",
             "http-request.cc",
             "http-response.cc",
+            "src/proxy-server.cc",
+            "src/proxy-server-client.cc",
+            "src/common.cc"
+
+
+			
             ]
         )
 
