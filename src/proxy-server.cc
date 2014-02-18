@@ -220,10 +220,14 @@ void* ProxyServer::onConnect(void *params)
    
    */
    
-   
+      Database* db = tp->db;
+
+
+
    ProxyServerClient *client;
    do{
       cout <<"READING REQUEST"<<endl;
+   //   bool conditional_GET = false;
       try{
          //Read the HTTP request from the client
          HttpRequest client_req = ProxyServer::getHttpRequest(tp->client_id);
@@ -237,7 +241,76 @@ void* ProxyServer::onConnect(void *params)
          }
          
          //TODO: check for cache here
+          //format the request into character array
+        size_t req_len = client_req.GetTotalLength()+1;
+        char* formated_req = new char[req_len];
+        client_req.FormatRequest(formated_req);
+   
+        //obtain server_name and path name
+        string server_name = client_req.GetHost();
+        string path_name = client_req.GetPath();
+
+        //obtain server port
+        stringstream ss;
+        ss << client_req.GetPort();
+        string port_num = ss.str();
+
+
+
+         //get the host + path as the checking standard in database for the cache file
+         //size_t server_len = strlen(server_name);
+         //size_t path_len = strlen(path_name);
+         //char* host_path = (char*)malloc(server_len + path_len);
+         //memcpy(host_path, server_name, server_len);
+         //memcpy(host_path + server_len, path_name, path_len);
+        string host_path = server_name + path_name;
          
+         if(db->containsHostPathCache(host_path))//means the cache exists
+         {
+            vector<string> entry =  db->getCache(host_path);
+            string expir = entry.at(0);
+            string formated_resp = entry.at(1);
+
+            char* cache_gmt = (char*)malloc(expir.length() * sizeof(char));
+            strcpy(cache_gmt, expir.c_str());
+
+           // check for last modified
+     //       string lastmodstr = .FindHeader("Last-Modified");
+       //     char* lastmod = (char*)malloc(lastmodstr.length() * sizeof(char));
+         //   strcpy(lastmod, lastmodstr.c_str());
+
+            //get current time and standarize both expiration time and current time
+            struct tm cache_time;
+            strptime(cache_gmt, "%a, %d %b %Y %H:%M:%S GMT", &cache_time);
+            time_t currenttm = time(0);
+            struct tm* currtm = gmtime(&currenttm);
+            time_t currentgmttm = timegm(currtm);
+            time_t cache_gmttm = timegm(&cache_time);
+
+            //if expir time < current time, send a req to the remote server
+            if(cache_gmttm < currentgmttm)   //means the request is expired
+            {
+               //Format a conditional GET request to the remote server
+//               client_req.AddHeader("If-Modified-Since", lastmod);
+ //              req_len = client_req.GetTotalLength();
+  //             formatedreq = (char*)malloc(formated_size);
+   //            client_req.FormatRequest(formated_req);
+    //           formated_req = (string)formatedreq;   //convert to string
+     //          conditional_GET = true;
+            }
+            else
+            {  
+               //send the cached result back to the client and close the socket
+               size_t bytes_sent = send(tp->client_id, formated_resp.c_str(), formated_resp.length(), 0);
+               if(bytes_sent < 0)
+                  perror("Cannot send back cache result");
+               return NULL;
+            }
+
+
+         }
+
+
          //create connection with remote server
          cout <<"Create proxy client"<<endl;
          client = new ProxyServerClient(client_req.GetHost(), client_req.GetPort());
@@ -251,7 +324,24 @@ void* ProxyServer::onConnect(void *params)
          
          //cout <<"[SIZE]: " <<resp.entire.length()<<endl;
          //cout << resp.entire <<endl;
-         
+    /*     if(conditional_GET)
+         {
+            string resp_status = resp.header.GetStatusCode();
+            if(resp_status.compare("304") == 0)
+            {
+               size_t bytes_sent = send()
+            }
+         }
+     */
+
+         //cache the response
+         string resp_content = resp.entire;
+         string resp_respiration = resp.header.FindHeader("Expires");
+
+         db -> updateCache(host_path, resp_respiration, resp_content);
+
+
+
          //send response back to client
          cout <<"Send response back to client"<<endl;
          ProxyServer::sendHttpResponse(tp->client_id, resp.entire);
