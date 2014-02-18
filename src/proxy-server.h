@@ -1,6 +1,6 @@
 #ifndef __PROXY_SERVER_H__
 #define __PROXY_SERVER_H__
-#include <string>
+#include <vector>
 #include "common.h"
 //#include <sqlite3.h>
 #include <string>
@@ -30,7 +30,10 @@ private:
    
    void connectSqlite();
    void disconnectSqlite();
-   void insertCache(std::string s);
+   bool containsHostPathCache(std::string s);
+   void insertCache(std::string host_path, std::string expire, std::string resp);
+   void updateCache(std::string host_path, std::string expire, std::string resp);
+   std::vector<std::string> getCache(std::string host_path);
    
    void setup();
    void loop();
@@ -41,7 +44,8 @@ private:
    int m_max_connections;
    int m_connections;
    //sqlite3 *db;
-   Database *db;
+   Database *m_db;
+   string m_db_name;
    
 };
 
