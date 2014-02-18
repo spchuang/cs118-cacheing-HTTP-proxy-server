@@ -4,7 +4,9 @@
 Database::Database(std::string filename)
 {
 	database = NULL;
-	open(filename);
+	if(!open(filename)){
+   	throw SqliteException("Cannot open database", sqlite3_errmsg(database));
+	}
 }
 
 Database::~Database()
@@ -51,7 +53,10 @@ vector<vector<string> > Database::query(std::string query)
 	}
 	
 	string error = sqlite3_errmsg(database);
-	if(error != "not an error") cout << query << " " << error << endl;
+	
+	if(error != "not an error"){
+	   throw SqliteException("Sqlite Cache", error.c_str());
+	}
 	
 	return results;  
 }
