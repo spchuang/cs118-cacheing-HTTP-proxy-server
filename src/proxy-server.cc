@@ -14,6 +14,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <vector>
 
 #include "../http-request.h"
 #include "../http-response.h"
@@ -33,14 +34,16 @@ ProxyServer::ProxyServer(const int port, const int timeout, const int max_connec
 ProxyServer::~ProxyServer()
 {
    close(m_listen_fd);
+   disconnectSqlite();
    
 }
 
 void ProxyServer::start()
 {  
    try{
-      setup();
-      loop();
+      //setup();
+      connectSqlite();
+      //loop();
    }catch(ProxyServerException& e){
       cout << "[ProxyServer ERROR]: "<< e.what() << endl;
    }
@@ -116,6 +119,72 @@ void ProxyServer::setup()
    if (listen(m_listen_fd, 100) == -1) {
       throw ProxyServerException("Socket listen", strerror(errno));
    }
+}
+
+/*
+Cache part using sqlite server
+*/
+void ProxyServer::connectSqlite()
+{
+   /*
+   cout <<"[DEBUG]: connecting to sqlite db" <<endl;
+   string db_file = "cache_proxy.db";
+   int rt;
+   string create_sql;
+   sqlite3_stmt *statement;
+   
+   if (SQLITE_OK != (rt = sqlite3_initialize())){
+      throw ProxyServerException("Failed to initialize library", "");
+   }
+   if(SQLITE_OK != sqlite3_open_v2(db_file.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL)){
+   	sqlite3_close(db);
+   	throw ProxyServerException("Cannot open database", sqlite3_errmsg(db));
+   }
+   cout << "open successfully" << endl;
+   
+   //create the CACHE table if it doesn't exists
+   create_sql = "CREATE TABLE IF NOT EXISTS CACHE("\
+         		"HOST_PATH VARCHAR(255),"\
+         		"EXPIRE VARCHAR(255),"\
+         		"FORMATED_RESP VARCHAR(255)"\
+         		");";
+   if(SQLITE_OK != sqlite3_prepare_v2(db, create_sql.c_str(), -1, &statement, NULL)){
+      sqlite3_close(db);
+   	throw ProxyServerException("Cannot create table", sqlite3_errmsg(db));
+   }
+   */
+   create_sql = "CREATE TABLE IF NOT EXISTS CACHE("\
+         		"HOST_PATH VARCHAR(1024),"\
+         		"EXPIRE VARCHAR(255),"\
+         		"FORMATED_RESP VARCHAR(1024)"\
+         		");";
+   db = new Database("cache_proxy.db");
+   
+   
+   db->query(create_sql.c_str());
+   db->query("INSERT INTO a VALUES(1, 2);");
+   db->query("INSERT INTO a VALUES(5, 4);");
+   vector<vector<string> > result = db->query("SELECT a, b FROM a;");
+   for(vector<vector<string> >::iterator it = result.begin(); it < result.end(); ++it)
+   {
+   	vector<string> row = *it;
+   	cout << "Values: (A=" << row.at(0) << ", B=" << row.at(1) << ")" << endl;
+   }
+   db->close();
+
+
+   
+}
+
+void ProxyServer::disconnectSqlite()
+{
+   cout <<"[DEBUG]: disconnecting to sqlite db" <<endl;
+   //sqlite3_close(db);
+}
+
+void ProxyServer::insertCache(string s)
+{
+
 }
 
 HttpRequest ProxyServer::getHttpRequest(int client_id)

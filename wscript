@@ -44,7 +44,8 @@ def build (env):
             "src/proxy-server.cc",
             "src/proxy-server-client.cc",
             "src/common.cc",
-	    "sqlite3.c"
+            "src/cache-db.cc",
+            "sqlite3/sqlite3.c"
 
 			
             ]

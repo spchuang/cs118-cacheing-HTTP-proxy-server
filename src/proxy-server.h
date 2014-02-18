@@ -2,8 +2,9 @@
 #define __PROXY_SERVER_H__
 #include <string>
 #include "common.h"
-
-
+//#include <sqlite3.h>
+#include <string>
+#include "cache-db.h"
 
 /*
    struct that holds in data passed to each thread
@@ -27,6 +28,9 @@ private:
    static HttpRequest getHttpRequest(int client_id);
    static void sendHttpResponse(int client_id, std::string response);
    
+   void connectSqlite();
+   void disconnectSqlite();
+   void insertCache(std::string s);
    
    void setup();
    void loop();
@@ -36,6 +40,9 @@ private:
    int m_listen_fd;
    int m_max_connections;
    int m_connections;
+   //sqlite3 *db;
+   Database *db;
+   
 };
 
 
