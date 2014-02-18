@@ -101,7 +101,6 @@ FullHttpResponse ProxyServerClient::getHttpResponse()
       throw ProxyServerException("Reading request data", strerror(errno));
    }
    
-   
    //cout <<"READ SIZE: " <<response.length()<<endl;
 
    try {
@@ -117,7 +116,7 @@ FullHttpResponse ProxyServerClient::getHttpResponse()
    }
    int body_size;
    istringstream ( cl ) >> body_size;
-   cout <<"GET BODY"<<endl;
+   //cout <<"GET BODY"<<endl;
    //read the response body
    
    r = recv_nth(m_remote_fd, body_size, resp.body);

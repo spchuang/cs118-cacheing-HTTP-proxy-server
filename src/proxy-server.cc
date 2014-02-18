@@ -5,7 +5,8 @@
 #include <pthread.h>
 #include <string>
 #include <sstream>
-
+#include <signal.h>
+#include <pthread.h>
 
 //C socket stuff
 #include <sys/types.h>
@@ -227,7 +228,6 @@ void* ProxyServer::onConnect(void *params)
    ProxyServerClient *client;
    do{
       cout <<"[CLIENT SOCKET]READING REQUEST"<<endl;
-   //   bool conditional_GET = false;
       try{
          //Read the HTTP request from the client
          HttpRequest client_req = ProxyServer::getHttpRequest(tp->client_id);
@@ -310,78 +310,9 @@ void* ProxyServer::onConnect(void *params)
                             resp.header.FindHeader("Expires"),
                             resp.entire);
          }
-
-
-
-         
-         //get the host + path as the checking standard in database for the cache file
-         //size_t server_len = strlen(server_name);
-         //size_t path_len = strlen(path_name);
-         //char* host_path = (char*)malloc(server_len + path_len);
-         //memcpy(host_path, server_name, server_len);
-         //memcpy(host_path + server_len, path_name, path_len);
-         /*
-        string host_path = server_name + path_name;
-         
-         if(db->containsHostPathCache(host_path))//means the cache exists
-         {
-            vector<string> entry =  db->getCache(host_path);
-            string expir = entry.at(0);
-            string formated_resp = entry.at(1);
-
-            char* cache_gmt = (char*)malloc(expir.length() * sizeof(char));
-            strcpy(cache_gmt, expir.c_str());
-
-           // check for last modified
-     //       string lastmodstr = .FindHeader("Last-Modified");
-       //     char* lastmod = (char*)malloc(lastmodstr.length() * sizeof(char));
-         //   strcpy(lastmod, lastmodstr.c_str());
-
-            //get current time and standarize both expiration time and current time
-            struct tm cache_time;
-            strptime(cache_gmt, "%a, %d %b %Y %H:%M:%S GMT", &cache_time);
-            time_t currenttm = time(0);
-            struct tm* currtm = gmtime(&currenttm);
-            time_t currentgmttm = timegm(currtm);
-            time_t cache_gmttm = timegm(&cache_time);
-
-            //if expir time < current time, send a req to the remote server
-            if(cache_gmttm < currentgmttm)   //means the request is expired
-            {
-               //Format a conditional GET request to the remote server
-//               client_req.AddHeader("If-Modified-Since", lastmod);
- //              req_len = client_req.GetTotalLength();
-  //             formatedreq = (char*)malloc(formated_size);
-   //            client_req.FormatRequest(formated_req);
-    //           formated_req = (string)formatedreq;   //convert to string
-     //          conditional_GET = true;
-            }
-            else
-            {  
-               //send the cached result back to the client and close the socket
-               size_t bytes_sent = send(tp->client_id, formated_resp.c_str(), formated_resp.length(), 0);
-               if(bytes_sent < 0)
-                  perror("Cannot send back cache result");
-               return NULL;
-            }
-
-
-         }
-*/
-
                 
+         //TODO: conditional get..
 
-         
-
-    /*     if(conditional_GET)
-         {
-            string resp_status = resp.header.GetStatusCode();
-            if(resp_status.compare("304") == 0)
-            {
-               size_t bytes_sent = send()
-            }
-         }
-     */
 
 
          //send response back to client
@@ -389,7 +320,6 @@ void* ProxyServer::onConnect(void *params)
          ProxyServer::sendHttpResponse(tp->client_id, resp.entire);
 
          
-      
          
       }catch(ProxyServerException& e){
          delete client;
@@ -431,6 +361,21 @@ void ProxyServer::loop()
       if(setsockopt( client_id, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))<0){
          throw ProxyServerException("Socket listen", strerror(errno));
       }
+      //before spawning a thread, see if we have reachd the max already
+      for(int i=0; i<(int)thread_ids.size(); i++){
+         if(pthread_kill(thread_ids[i], 0) !=0){
+            //thread is dead, remove
+            thread_ids.erase(thread_ids.begin()+i);
+            i--;
+         }
+      }
+      
+      //drop the connection if we are already handling the maximum number of concurrent requests
+      if((int)thread_ids.size() == m_max_connections){
+         close(client_id);
+         continue;
+      }
+      
       
       //spawn a new thread for each new connection
       thread_params *tp = (thread_params *) malloc(sizeof(thread_params));;
@@ -442,5 +387,6 @@ void ProxyServer::loop()
          close(client_id);
          throw ProxyServerException("Thread creation", strerror(errno));
       }
+      thread_ids.push_back(client_id);
    }
 }

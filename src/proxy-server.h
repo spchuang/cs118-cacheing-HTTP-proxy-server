@@ -40,6 +40,7 @@ private:
    int m_timeout;
    int m_listen_fd;
    int m_max_connections;
+   vector<pthread_t> thread_ids;
    int m_connections;
 
    Database *m_db;

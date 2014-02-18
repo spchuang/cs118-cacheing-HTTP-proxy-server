@@ -6,7 +6,7 @@
 
 #define PROXY_SERVER_PORT 14886 //"14886"
 #define MAX_THREAD_NUM    20
-#define PERSISTENT_TIME_OUT 5 //5 seconds
+#define PERSISTENT_TIME_OUT 15 //15 seconds
 
 int main (int argc, char *argv[])
 {
