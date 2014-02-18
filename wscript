@@ -21,7 +21,7 @@ def configure (env):
     env.add_supported_cxxflags (cxxflags = ['-O0', '-g3', '-Wall', 
                                             '-Wno-unused-private-field', 
                                             '-fcolor-diagnostics', '-Qunused-arguments', 
-                                            '-Werror'])
+                                            '-Werror', '-ldl'])
 
 def build (env):
     env.load ('compiler_c compiler_cxx')
@@ -30,7 +30,8 @@ def build (env):
     server = env.program (
         target = "http-proxy",
         features = ["cxx", "cxxprogram"],
-        use = 'BOOST BOOST_SYSTEM BOOST_THREAD',
+        use = 'BOOST BOOST_SYSTEM BOOST_THREAD sqlite3',
+        lib = ['sqlite3'],
         source = [
             # Put additional files here
             # ...
@@ -43,8 +44,7 @@ def build (env):
             "src/proxy-server.cc",
             "src/proxy-server-client.cc",
             "src/common.cc",
-	    "sqlite3.c",
-	    "shell.c"
+	    "sqlite3.c"
 
 			
             ]
