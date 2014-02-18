@@ -15,6 +15,8 @@ There are two main classes for this project.
    The ProxyServerClient will connect to the remote server to make request and read the response. The response will then be saved in the sqlite db and returned back to the client. This wrapper abstract out the client aspect of the proxy server code and make it easier to manage the number of concurrent connections to the remote server. 
 
 3. Caching with sqlite (TODO for Benjamin)
+   -use sqlite database to store the data. The key is host string + path string. every key corresponds to a response value and response respiration date.
+   The proxy first accept the client request, and then look up the cache and see whether it is already in the cache, will return the response if the request hit the cache, and if not, the proxy will connect to the remote server and ask for the response. Then the proxy will store the response itself, the expiration date and its corresponding host_path key to the database for the caching purpose. 
 
 
 General
