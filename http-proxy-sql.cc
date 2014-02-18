@@ -390,7 +390,14 @@ void* ptread_connection(void *params){
 
 		//if expir time < current time, send a req to the remote server
 		if(cache_gmttm < currentgmttm)	//means the request is expired
+		{
+			//Format a conditional GET request to the remote server
+			client_req.AddHeader("If-Modified-Since", lastmod);
+			formated_size = client_req.GetTotalLength();
+			formated_req = (char*)malloc(formated_size);
+			client_req.FormatRequest(formated_req);
 			conditional_GET = true;
+		}
 		else
 		{	
 			//send the cached result back to the client and close the socket
@@ -441,6 +448,7 @@ void* ptread_connection(void *params){
 			size_t bytes_sent = send(tp->client_id, formated_resp, formated_resp.length(), 0);
 			if(bytes_sent < 0)
 				perror("Cannot send the cached version, although is expired");
+			
 			else
 			{
 				cout << "Sending back cached version, conditional GET" << endl;
