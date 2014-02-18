@@ -42,8 +42,9 @@ def build (env):
             "http-response.cc",
             "src/proxy-server.cc",
             "src/proxy-server-client.cc",
-            "src/common.cc"
-
+            "src/common.cc",
+	    "sqlite3.c",
+	    "shell.c"
 
 			
             ]
