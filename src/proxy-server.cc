@@ -226,7 +226,7 @@ void* ProxyServer::onConnect(void *params)
 
    ProxyServerClient *client;
    do{
-      cout <<"READING REQUEST"<<endl;
+      cout <<"[CLIENT SOCKET]READING REQUEST"<<endl;
    //   bool conditional_GET = false;
       try{
          //Read the HTTP request from the client
@@ -241,28 +241,86 @@ void* ProxyServer::onConnect(void *params)
          }
          
          //TODO: check for cache here
-          //format the request into character array
-        size_t req_len = client_req.GetTotalLength()+1;
-        char* formated_req = new char[req_len];
-        client_req.FormatRequest(formated_req);
-   
-        //obtain server_name and path name
-        string server_name = client_req.GetHost();
-        string path_name = client_req.GetPath();
+         string host_path = client_req.GetHost()+client_req.GetPath();
+         bool request_remote_server = true;
+         bool update_cache = false;
+         bool insert_cache = true;
+         FullHttpResponse resp;
+         
+         //check if the cache already has the response
+         if(db->containsHostPathCache(host_path)){
+            cout << "READ FROM CACHE" <<endl;
+            insert_cache = false;
+            //get the cached entry
+            vector<string> entry =  db->getCache(host_path);
+            string expir = entry.at(0);
+            string formated_resp = entry.at(1);
+            
+            //convert the cached expiration time into time_t type
+            struct tm cache_expires_tm;
+            strptime(expir.c_str(), "%a, %d %b %Y %H:%M:%S GMT", &cache_expires_tm);
+            time_t cache_expires_time = timegm(&cache_expires_tm);
+            
+            //get current time 
+            time_t current_time;
+            time(&current_time);
+            
+            cout << cache_expires_time << " , " <<current_time<<endl;
+            
+            //if expir time < current time, send a req to the remote server
+            if(cache_expires_time < current_time){
+               request_remote_server = true;
+               update_cache = true;
+            }else{
+            //the content hasn't expired yet so we don't need to request stuff from the server and update the cache
+               request_remote_server = false;
+               update_cache = false;
+               //set up the return response from the cache
+               resp.entire = formated_resp;
+            }
+         }
+         
+         
+         if(request_remote_server){
+            cout << "REQUEST FROM REMOTE SEVER" <<endl;
+             //create connection with remote server
+            cout <<"Create proxy client"<<endl;
+            client = new ProxyServerClient(client_req.GetHost(), client_req.GetPort());
+            
+            //get the response from remote server
+            cout <<"send proxy request"<<endl;
+            client->sendHttpRequest(client_req);
+            
+            cout <<"GET proxy response"<<endl;
+            resp = client->getHttpResponse();
+            delete client;
+         }
+         
+         if(update_cache){
+            cout << "UPDATE TO CACHE"<<endl;
+            //update the cache with the response
+            db->updateCache(host_path, 
+                            resp.header.FindHeader("Expires"), 
+                            resp.entire);
+         }
+         
+         if(insert_cache){
+            cout << "INSERT TO CACHE"<<endl;
+            db->insertCache(host_path, 
+                            resp.header.FindHeader("Expires"),
+                            resp.entire);
+         }
 
-        //obtain server port
-        stringstream ss;
-        ss << client_req.GetPort();
-        string port_num = ss.str();
 
 
-
+         
          //get the host + path as the checking standard in database for the cache file
          //size_t server_len = strlen(server_name);
          //size_t path_len = strlen(path_name);
          //char* host_path = (char*)malloc(server_len + path_len);
          //memcpy(host_path, server_name, server_len);
          //memcpy(host_path + server_len, path_name, path_len);
+         /*
         string host_path = server_name + path_name;
          
          if(db->containsHostPathCache(host_path))//means the cache exists
@@ -309,21 +367,12 @@ void* ProxyServer::onConnect(void *params)
 
 
          }
+*/
 
+                
 
-         //create connection with remote server
-         cout <<"Create proxy client"<<endl;
-         client = new ProxyServerClient(client_req.GetHost(), client_req.GetPort());
          
-         //get the response from remote server
-         cout <<"send proxy request"<<endl;
-         client->sendHttpRequest(client_req);
-         
-         cout <<"GET proxy response"<<endl;
-         FullHttpResponse resp = client->getHttpResponse();
-         
-         //cout <<"[SIZE]: " <<resp.entire.length()<<endl;
-         //cout << resp.entire <<endl;
+
     /*     if(conditional_GET)
          {
             string resp_status = resp.header.GetStatusCode();
@@ -334,21 +383,13 @@ void* ProxyServer::onConnect(void *params)
          }
      */
 
-         //cache the response
-         string resp_content = resp.entire;
-         string resp_respiration = resp.header.FindHeader("Expires");
-
-         db -> updateCache(host_path, resp_respiration, resp_content);
-
-
 
          //send response back to client
          cout <<"Send response back to client"<<endl;
          ProxyServer::sendHttpResponse(tp->client_id, resp.entire);
+
          
-         delete client;
-         
-         cout <<client_req.GetHost() <<endl;
+      
          
       }catch(ProxyServerException& e){
          delete client;

@@ -27,7 +27,7 @@ ProxyServerClient::ProxyServerClient(const std::string host, const short port)
       connectServer();
    }catch(ProxyServerException& e){
       cout << "[ProxyServerClient ERROR]: "<< e.what() << endl;
-      throw ProxyServerException("ProxyServerClient", "failed to establish connection with the remote server");
+      //throw ProxyServerException("ProxyServerClient", "failed to establish connection with the remote server");
    }
    
 
@@ -53,11 +53,10 @@ void ProxyServerClient::connectServer()
    hints.ai_socktype = SOCK_STREAM;
    hints.ai_flags = AI_PASSIVE;
    int t;
-   cout << 1<<endl;
    if( ( t =getaddrinfo(m_host.c_str(), ss.str().c_str(), &hints, &res)) <0){
       throw ProxyServerException("Get addr info", strerror(errno));
    }
-cout << 2<<endl;
+
    //create the socket
    m_remote_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
    if(m_remote_fd <0){
@@ -65,7 +64,7 @@ cout << 2<<endl;
       throw ProxyServerException("Open socket", strerror(errno));
 
    }
-cout << 3<<endl;
+
    //connect through the socket
    if(connect(m_remote_fd, res->ai_addr, res->ai_addrlen) < 0){
       close(m_remote_fd);
@@ -95,9 +94,14 @@ FullHttpResponse ProxyServerClient::getHttpResponse()
    string response;
    
    //READ the http header
-   if(recv_until(m_remote_fd, "\r\n\r\n", 4, response) <0){
+   int r = recv_until(m_remote_fd, "\r\n\r\n", 4, response);
+   if(r==EAGAIN){
+      throw ProxyServerErrorResponseException("HTTP/1.1 408 Request Timeout");
+   }else if(r<0){
       throw ProxyServerException("Reading request data", strerror(errno));
    }
+   
+   
    //cout <<"READ SIZE: " <<response.length()<<endl;
 
    try {
@@ -115,8 +119,12 @@ FullHttpResponse ProxyServerClient::getHttpResponse()
    istringstream ( cl ) >> body_size;
    cout <<"GET BODY"<<endl;
    //read the response body
-   if(recv_nth(m_remote_fd, body_size, resp.body) <0){
-      throw ProxyServerException("Reading response body", strerror(errno));
+   
+   r = recv_nth(m_remote_fd, body_size, resp.body);
+   if(r==EAGAIN){
+      throw ProxyServerErrorResponseException("HTTP/1.1 408 Request Timeout");
+   }else if(r<0){
+      throw ProxyServerException("Reading request data", strerror(errno));
    }
       
    //cout <<"[DEBUG]READ BODY RESPONSE: " <<endl<<"'"<<resp.body<<"'"<<endl;
