@@ -1,3 +1,24 @@
+This is a basic implementation of a caching HTTP proxy server, based on the skeleton code from (github.com/iliamo/cs118-project1) for CS118 at UCLA. 
+
+
+There are two main classes for this project.
+
+1. ProxyServer
+   - Setup
+   The ProxyServer class represent the HTTP caching proxy server. It could be initialized by specifying the server port, maximum concurrent connections (thread number), and the timeout for the persistent connections. The server class contains one public method, "start", which setups up the proxy server. It first sets up the proxy server by creating a BSD socket to listen to a specific port where the socket is binded. Once the setup is completed without any errors, the program enters an infinite loop which accepts new HTTP connection. The server spawns a separate thread for each request and detachs the thread because we want each thread to handle an accepted socket connection until it's closed. We also setup a timeout for the socket so, once the timeout time has passed (5 seconds in this case) without any byte sent to the receiving buffer stream, the thread exits and closes the socket connection. 
+   
+   - Connection handling (thread independent)
+   The thread function keeps a boolean variable which keeps track of the state of the persistent connection. By default, the connection is persistent. Then the thread enters an infinite loop which reads the HTTP request and returns the appropriate HTTP response and repeat this process until there is a timeout on the thread connection or the client sent a http request with the header "conection: close", which tells the proxy server to close the connection after responding to this request. 
+   The thread first reads the string request from the client then parse it with the given HttpRequest class. If there's a parse exception thrown, the thread returns either "400 Bad Request" for invalid http request or "501 Not Implemented" for requests other than GET. Once the Http request is parsed and contains no errors, we first check if there's a header "connection:close" to modify our persistent state for the connection. After that, the  thread checks whether or not the request has already been cached in the db server (see below for more details).  If the request is not cached, the thread creates an instance of ProxyServerClient to handle request to the remote server. 
+   
+2. ProxyServerClient 
+   The ProxyServerClient will connect to the remote server to make request and read the response. The response will then be saved in the sqlite db and returned back to the client. This wrapper abstract out the client aspect of the proxy server code and make it easier to manage the number of concurrent connections to the remote server. 
+   
+   
+
+3. Caching with sqlite (TODO for Benjamin)
+
+
 General
 =======
 
@@ -8,6 +29,8 @@ Ideally, you will need only to add your source files in wscript, which is basica
 
 How to use skeleton
 ===================
+
+Build Directions (specific to UCLA seas server lnxsrv)
 
 Due to restrictions on lnxsrv, several steps necessary to compile and run (if you're using this skeleton):
 

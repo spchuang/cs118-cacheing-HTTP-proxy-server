@@ -1,0 +1,9 @@
+Project Contributors:
+=============
+Samping Chuang 603945890
+
+   Worked on infrastructure for the proxy server code, including server-side socket, threading for each incoming request, and proxy clients to fetch data from the remote servers.
+
+Benjamin Bao 004038155
+
+   Worked on the Cache part with sqlite and conditional GET.
