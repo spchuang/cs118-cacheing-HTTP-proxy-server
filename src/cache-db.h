@@ -31,6 +31,12 @@ public:
 	vector<vector<string> > query(string query);
 	void close();
 	
+	bool containsHostPathCache(std::string s);
+   
+   void insertCache(std::string host_path, std::string expire, std::string resp);
+   void updateCache(std::string host_path, std::string expire, std::string resp);
+   std::vector<std::string> getCache(std::string host_path);
+	  
 private:
 	sqlite3 *database;
 	//Database *db;

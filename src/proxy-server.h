@@ -11,6 +11,7 @@
 */
 typedef struct str_thdata{
   int client_id;
+  Database *db;
 }thread_params;
 
 /**
@@ -30,10 +31,7 @@ private:
    
    void connectSqlite();
    void disconnectSqlite();
-   bool containsHostPathCache(std::string s);
-   void insertCache(std::string host_path, std::string expire, std::string resp);
-   void updateCache(std::string host_path, std::string expire, std::string resp);
-   std::vector<std::string> getCache(std::string host_path);
+   
    
    void setup();
    void loop();
@@ -43,7 +41,7 @@ private:
    int m_listen_fd;
    int m_max_connections;
    int m_connections;
-   //sqlite3 *db;
+
    Database *m_db;
    string m_db_name;
    

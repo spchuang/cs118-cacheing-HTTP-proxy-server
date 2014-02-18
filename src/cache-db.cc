@@ -1,4 +1,5 @@
 #include "cache-db.h"
+#include <stdlib.h>     /* atoi */
 #include <iostream>
 
 Database::Database(std::string filename)
@@ -6,6 +7,9 @@ Database::Database(std::string filename)
 	database = NULL;
 	if(!open(filename)){
    	throw SqliteException("Cannot open database", sqlite3_errmsg(database));
+	}
+	if(!sqlite3_threadsafe()){
+   	cout <<"[WARNING] This is not thread safe"<<endl;
 	}
 }
 
@@ -64,4 +68,40 @@ vector<vector<string> > Database::query(std::string query)
 void Database::close()
 {
 	sqlite3_close(database);   
+}
+
+
+bool Database::containsHostPathCache(string host_path)
+{
+   string sql ="SELECT count(HOST_PATH) FROM CACHE WHERE HOST_PATH='"+host_path+"';";
+
+   vector<vector<string> > result = query(sql.c_str());
+   
+   string count_string = result.at(0).at(0);
+   int count = atoi(count_string.c_str());
+   
+   return count>0;
+}
+
+void Database::insertCache(string host_path, string expire, string resp)
+{
+   string sql = "INSERT INTO CACHE VALUES('"+host_path+"', '"+expire+"', '"+resp+"');" ;
+   query(sql.c_str());
+}
+
+
+//   return vector<string>
+//   [0] = EXPIRE
+//   [1] = FORMATED_RESP
+
+vector<string> Database::getCache(string host_path){
+   string sql = "SELECT EXPIRE, FORMATED_RESP FROM CACHE  WHERE HOST_PATH='"+host_path+"';";
+   vector<vector<string> > result = query(sql.c_str());
+   return result.at(0);
+}
+
+void Database::updateCache(string host_path, string expire, string resp)
+{
+   string sql = "UPDATE CACHE SET EXPIRE='"+expire+"',FORMATED_RESP='"+resp+"' WHERE HOST_PATH='"+host_path+"';" ;
+   query(sql.c_str());
 }

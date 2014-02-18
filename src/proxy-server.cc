@@ -43,26 +43,26 @@ ProxyServer::~ProxyServer()
 void ProxyServer::start()
 {  
    try{
-      //setup();
-      //loop();
-      
-      connectSqlite();
-      insertCache("TEST","TEST","TEST");
-      if(containsHostPathCache("TEST")){
+      connectSqlite();    
+      setup();
+      loop();
+      /*
+         db->insertCache("TEST","TEST","TEST");
+         if(db->containsHostPathCache("TEST")){
          cout <<"CORRECT 1 "<<endl;
+         }
          
-      }
-      vector<string> t = getCache("TEST");
-      updateCache("TEST", "TEST2", "TEST3");
-      vector<string> t2 = getCache("TEST");
-      
-      cout << t.at(0) << " " <<t.at(1)<<endl;
-      cout << t2.at(0) << " " <<t2.at(1)<<endl;
-      
-      if(!containsHostPathCache("TEST2")){
+         vector<string> t = db->getCache("TEST");
+         db->updateCache("TEST", "TEST2", "TEST3");
+         vector<string> t2 = db->getCache("TEST");
+         
+         cout << t.at(0) << " " <<t.at(1)<<endl;
+         cout << t2.at(0) << " " <<t2.at(1)<<endl;
+         if(!db->containsHostPathCache("TEST2")){
          cout <<"CORRECT 2 "<<endl;
          
-      }
+         }
+      */
       
    }catch(ProxyServerException& e){
       cout << "[ProxyServer ERROR]: "<< e.what() << endl;
@@ -165,40 +165,6 @@ void ProxyServer::disconnectSqlite()
    m_db->close();
 }
 
-bool ProxyServer::containsHostPathCache(string host_path)
-{
-   string sql ="SELECT count(HOST_PATH) FROM CACHE WHERE HOST_PATH='"+host_path+"';";
-
-   vector<vector<string> > result = m_db->query(sql.c_str());
-   
-   string count_string = result.at(0).at(0);
-   int count = atoi(count_string.c_str());
-   
-   return count>0;
-}
-
-void ProxyServer::insertCache(string host_path, string expire, string resp)
-{
-   string sql = "INSERT INTO CACHE VALUES('"+host_path+"', '"+expire+"', '"+resp+"');" ;
-   m_db->query(sql.c_str());
-}
-
-/*
-   return vector<string>
-   [0] = EXPIRE
-   [1] = FORMATED_RESP
-*/
-vector<string> ProxyServer::getCache(string host_path){
-   string sql = "SELECT EXPIRE, FORMATED_RESP FROM CACHE  WHERE HOST_PATH='"+host_path+"';";
-   vector<vector<string> > result = m_db->query(sql.c_str());
-   return result.at(0);
-}
-
-void ProxyServer::updateCache(string host_path, string expire, string resp)
-{
-   string sql = "UPDATE CACHE SET EXPIRE='"+expire+"',FORMATED_RESP='"+resp+"' WHERE HOST_PATH='"+host_path+"';" ;
-   m_db->query(sql.c_str());
-}
 
 HttpRequest ProxyServer::getHttpRequest(int client_id)
 {
@@ -242,6 +208,17 @@ void* ProxyServer::onConnect(void *params)
    thread_params *tp = (thread_params *)params;
    //int remote_fd;
    cout << "[THREAD DEBUG] client id: " <<tp->client_id<<endl;   
+   
+   
+   /*
+      DB FUNCTIONS HERE
+      Database *db = tp->db;
+      db->insertCache("TEST","TEST","TEST");
+      db->containsHostPathCache("TEST")
+      db->updateCache("TEST", "TEST2", "TEST3")
+      db->vector<string> t2 = db->getCache("TEST")
+   
+   */
    
    
    ProxyServerClient *client;
@@ -305,6 +282,8 @@ void ProxyServer::loop()
    struct sockaddr_storage client_addr;
    socklen_t client_len;
    
+   
+   
    while(1){
       client_len= sizeof(client_addr);
       cout <<"[ProxyServer DEBUG]: accepting connections"<<endl;
@@ -325,6 +304,7 @@ void ProxyServer::loop()
       //spawn a new thread for each new connection
       thread_params *tp = (thread_params *) malloc(sizeof(thread_params));;
       tp->client_id = client_id;
+      tp->db        = m_db;
       pthread_t thread;
 
       if(pthread_create(&thread, NULL, &ProxyServer::onConnect, (void *) tp)){

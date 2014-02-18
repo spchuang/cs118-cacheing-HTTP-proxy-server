@@ -42,7 +42,7 @@ int recv_nth(int socked_fd, int length, std::string& data)
    while(length>0)
    {
       memset(recv_buff, 0, BUFFER_SIZE);
-      cout <<"[]"<<recv_buff<<endl;
+      //cout <<"[]"<<recv_buff<<endl;
       bytes_rcv = recv(socked_fd, recv_buff, sizeof(recv_buff)-1, 0);
       //cout <<"BYTES RECV IS " <<bytes_rcv<<endl;
       if( bytes_rcv < 0){
