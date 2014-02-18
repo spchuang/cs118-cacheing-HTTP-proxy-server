@@ -20,7 +20,7 @@ int recv_until(int socked_fd, const char* end_string, const int length, string& 
       bytes_rcv = recv(socked_fd, buf, sizeof(buf)-1 , 0);
       if(bytes_rcv == EAGAIN){
          cout <<"BLOCK"<<endl;
-         return -2;
+         return EAGAIN;
       }
       if (bytes_rcv < 0)
       {
@@ -45,6 +45,9 @@ int recv_nth(int socked_fd, int length, std::string& data)
       //cout <<"[]"<<recv_buff<<endl;
       bytes_rcv = recv(socked_fd, recv_buff, sizeof(recv_buff)-1, 0);
       //cout <<"BYTES RECV IS " <<bytes_rcv<<endl;
+      if(bytes_rcv == EAGAIN){
+         return EAGAIN;
+      }
       if( bytes_rcv < 0){
          return -1;
       }
